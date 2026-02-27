@@ -49,13 +49,13 @@ fi
 echo "========================================"
 echo "🔄 正在下载 quickstart 相关 ipk..."
 echo "========================================"
-mkdir -p /home/build/immortalwrt/extra-packages
+mkdir -p /home/build/immortalwrt/packages
 
 QUICKSTART_BASE_URL="https://github.com/animegasan/luci-app-quickstart/releases/download/1.0.2"
 
 wget -q --show-progress \
     "${QUICKSTART_BASE_URL}/quickstart_0.7.12-60_x86_64.ipk" \
-    -O /home/build/immortalwrt/extra-packages/quickstart_0.7.12-60_x86_64.ipk
+    -O /home/build/immortalwrt/packages/quickstart_0.7.12-60_x86_64.ipk
 if [ $? -ne 0 ]; then
     echo "❌ 下载 quickstart_0.7.12-60_x86_64.ipk 失败，退出构建"
     exit 1
@@ -63,62 +63,49 @@ fi
 
 wget -q --show-progress \
     "${QUICKSTART_BASE_URL}/luci-app-quickstart_1.0.2-20230817_all.ipk" \
-    -O /home/build/immortalwrt/extra-packages/luci-app-quickstart_1.0.2-20230817_all.ipk
+    -O /home/build/immortalwrt/packages/luci-app-quickstart_1.0.2-20230817_all.ipk
 if [ $? -ne 0 ]; then
     echo "❌ 下载 luci-app-quickstart 失败，退出构建"
     exit 1
 fi
-echo "✅ quickstart ipk 下载成功"
+echo "✅ quickstart ipk 下载成功并已注册到本地仓库"
 
-# 拷贝到本地仓库目录，使 make image 能够识别
-cp /home/build/immortalwrt/extra-packages/quickstart_0.7.12-60_x86_64.ipk \
-   /home/build/immortalwrt/packages/
-cp /home/build/immortalwrt/extra-packages/luci-app-quickstart_1.0.2-20230817_all.ipk \
-   /home/build/immortalwrt/packages/
-echo "✅ quickstart ipk 已注册到本地仓库"
-
-
-# ============= 下载 homeproxy 自定义版本并写入启动替换脚本 =============
+# ============= 下载 homeproxy 自定义版本并注册到本地仓库 =============
 echo "========================================"
 echo "🔄 正在下载 homeproxy 自定义版本 ipk..."
 echo "========================================"
 
 HOMEPROXY_CUSTOM_URL="https://github.com/bulianglin/homeproxy/releases/download/dev/luci-app-homeproxy__all.ipk"
 
-# 下载到 FILES/root，随固件打包，路由器启动后可访问
-mkdir -p /home/build/immortalwrt/files/root
-
 wget -q --show-progress \
     "${HOMEPROXY_CUSTOM_URL}" \
-    -O /home/build/immortalwrt/files/root/luci-app-homeproxy_custom_all.ipk
+    -O /home/build/immortalwrt/packages/luci-app-homeproxy_custom_all.ipk
 if [ $? -ne 0 ]; then
-    echo "❌ 下载 luci-app-homeproxy 自定义版本失败，退出构建"
+    echo "❌ 下载 homeproxy 自定义版本失败，退出构建"
     exit 1
 fi
-echo "✅ homeproxy 自定义版本下载成功"
+echo "✅ homeproxy 自定义版本下载成功，已注册到本地仓库"
 
-# 写入 uci-defaults 脚本，路由器首次启动时自动卸载官方版并安装自定义版
-mkdir -p /home/build/immortalwrt/files/etc/uci-defaults
-cat << 'UCIEOF' > /home/build/immortalwrt/files/etc/uci-defaults/99-install-homeproxy
-#!/bin/sh
-echo ">>> 开始替换 luci-app-homeproxy 为自定义版本..."
+# ============= 生成本地仓库索引 =============
+echo "========================================"
+echo "🔄 正在生成本地仓库索引..."
+echo "========================================"
+cd /home/build/immortalwrt/packages
+../scripts/ipkg-make-index.sh . > Packages
+gzip -k Packages
+cd /home/build/immortalwrt
+echo "✅ 本地仓库索引生成完毕"
+ls -lah /home/build/immortalwrt/packages/
 
-# 卸载官方版本，保留依赖
-opkg remove luci-app-homeproxy --force-removal-of-dependent-packages=0
-
-# 安装自定义版本
-opkg install /root/luci-app-homeproxy_custom_all.ipk
-
-# 清理安装包
-rm -f /root/luci-app-homeproxy_custom_all.ipk
-
-echo ">>> luci-app-homeproxy 替换完成"
-rm -f /etc/uci-defaults/99-install-homeproxy
-UCIEOF
-
-chmod +x /home/build/immortalwrt/files/etc/uci-defaults/99-install-homeproxy
-echo "✅ uci-defaults 替换脚本已写入"
-
+# ============= 注册本地仓库到 repositories.conf =============
+# 避免重复添加
+if ! grep -q "src/gz local_extra" repositories.conf; then
+    echo "src/gz local_extra file:///home/build/immortalwrt/packages" >> repositories.conf
+    echo "✅ 本地仓库已注册到 repositories.conf"
+else
+    echo "⚪️ 本地仓库已存在，跳过注册"
+fi
+cat repositories.conf
 
 # 输出调试信息
 echo "$(date '+%Y-%m-%d %H:%M:%S') - 开始构建..."
@@ -126,7 +113,6 @@ PACKAGES=""
 PACKAGES="$PACKAGES curl"
 PACKAGES="$PACKAGES luci-i18n-diskman-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-firewall-zh-cn"
-PACKAGES="$PACKAGES luci-i18n-filebrowser-zh-cn"
 PACKAGES="$PACKAGES luci-theme-argon"
 PACKAGES="$PACKAGES luci-app-argon-config"
 PACKAGES="$PACKAGES luci-i18n-argon-config-zh-cn"
@@ -140,8 +126,8 @@ PACKAGES="$PACKAGES luci-i18n-samba4-zh-cn"
 # quickstart：从本地仓库安装
 PACKAGES="$PACKAGES quickstart"
 PACKAGES="$PACKAGES luci-app-quickstart"
-# homeproxy：官方版用于解析依赖，首次启动时会被 uci-defaults 替换为自定义版
-PACKAGES="$PACKAGES luci-app-homeproxy"
+# homeproxy：直接从本地仓库安装自定义版本
+PACKAGES="$PACKAGES luci-app-homeproxy_custom_all"
 # 合并第三方插件
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
 
