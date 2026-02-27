@@ -68,9 +68,37 @@ if [ $? -ne 0 ]; then
     echo "❌ 下载 luci-app-quickstart 失败，退出构建"
     exit 1
 fi
-echo "✅ quickstart ipk 下载成功并已注册到本地仓库"
+echo "✅ quickstart ipk 下载成功"
 
-# ============= 手动生成本地仓库索引（仅 quickstart） =============
+# ============= 下载 iStore 相关 ipk =============
+echo "========================================"
+echo "🔄 正在下载 iStore 相关 ipk..."
+echo "========================================"
+
+ISTORE_BASE_URL="https://istore.linkease.com/repo/all/store"
+
+ISTORE_PKGS=(
+    "taskd_1.0.3-2_all.ipk"
+    "luci-lib-taskd_1.0.3-2_all.ipk"
+    "luci-lib-xterm_1.0.0-1_all.ipk"
+    "luci-app-store_0.1.32-1_all.ipk"
+)
+
+for pkg in "${ISTORE_PKGS[@]}"; do
+    echo "📦 正在下载: $pkg"
+    wget -q --show-progress \
+        "${ISTORE_BASE_URL}/${pkg}" \
+        -O /home/build/immortalwrt/packages/${pkg}
+    if [ $? -ne 0 ]; then
+        echo "❌ 下载 ${pkg} 失败，退出构建"
+        exit 1
+    fi
+    echo "✅ ${pkg} 下载成功"
+done
+
+echo "✅ iStore 相关 ipk 全部下载成功"
+
+# ============= 手动生成本地仓库索引 =============
 echo "========================================"
 echo "🔄 正在手动生成本地仓库索引..."
 echo "========================================"
@@ -158,6 +186,11 @@ PACKAGES="$PACKAGES luci-i18n-samba4-zh-cn"
 # quickstart：从本地仓库安装
 PACKAGES="$PACKAGES quickstart"
 PACKAGES="$PACKAGES luci-app-quickstart"
+# iStore：从本地仓库安装
+PACKAGES="$PACKAGES taskd"
+PACKAGES="$PACKAGES luci-lib-taskd"
+PACKAGES="$PACKAGES luci-lib-xterm"
+PACKAGES="$PACKAGES luci-app-store"
 # 合并第三方插件
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
 
