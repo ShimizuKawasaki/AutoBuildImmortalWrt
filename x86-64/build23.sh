@@ -139,124 +139,6 @@ echo "📋 当前 repositories.conf："
 cat repositories.conf
 echo "========================================"
 
-# ============= 预下载 homeproxy 自定义版本，打包进固件 =============
-echo "========================================"
-echo "🔄 正在下载 homeproxy 自定义版本 ipk，打包进固件..."
-echo "========================================"
-
-HOMEPROXY_CUSTOM_URL="https://github.com/bulianglin/homeproxy/releases/download/dev/luci-app-homeproxy__all.ipk"
-HOMEPROXY_IPK_NAME="luci-app-homeproxy_custom_all.ipk"
-PREINSTALL_DIR="/home/build/immortalwrt/files/root/preinstall"
-
-mkdir -p "$PREINSTALL_DIR"
-
-wget -q --show-progress \
-    --no-check-certificate \
-    --timeout=60 \
-    --tries=3 \
-    "${HOMEPROXY_CUSTOM_URL}" \
-    -O "${PREINSTALL_DIR}/${HOMEPROXY_IPK_NAME}"
-
-if [ $? -ne 0 ] || [ ! -s "${PREINSTALL_DIR}/${HOMEPROXY_IPK_NAME}" ]; then
-    echo "❌ 下载 homeproxy 自定义版本失败，退出构建"
-    exit 1
-fi
-
-echo "✅ homeproxy ipk 下载成功: $(du -sh ${PREINSTALL_DIR}/${HOMEPROXY_IPK_NAME})"
-
-# ============= 写入首次启动安装脚本 =============
-echo "========================================"
-echo "🔄 写入 uci-defaults 首次启动安装脚本..."
-echo "========================================"
-
-mkdir -p /home/build/immortalwrt/files/etc/uci-defaults
-
-cat << 'UCIEOF' > /home/build/immortalwrt/files/etc/uci-defaults/99-install-homeproxy
-#!/bin/sh
-
-IPK_PATH="/root/preinstall/luci-app-homeproxy_custom_all.ipk"
-LOG="/var/log/homeproxy-install.log"
-
-echo "[$(date)] ===== 开始安装 homeproxy =====" >> "${LOG}"
-
-# ============= 等待网络就绪 =============
-echo "[$(date)] 等待网络就绪..." >> "${LOG}"
-MAX_WAIT=10
-WAITED=0
-while ! ping -c 1 -W 2 223.5.5.5 > /dev/null 2>&1; do
-    if [ "$WAITED" -ge "$MAX_WAIT" ]; then
-        echo "[$(date)] ⚠️  网络等待超时 ${MAX_WAIT}s，跳过 opkg update，继续本地安装..." >> "${LOG}"
-        break
-    fi
-    echo "[$(date)] 网络未就绪，等待中... (${WAITED}s)" >> "${LOG}"
-    sleep 5
-    WAITED=$((WAITED + 5))
-done
-
-# ============= opkg update =============
-if ping -c 1 -W 2 223.5.5.5 > /dev/null 2>&1; then
-    echo "[$(date)] 网络已就绪，执行 opkg update..." >> "${LOG}"
-    opkg update >> "${LOG}" 2>&1
-    if [ $? -eq 0 ]; then
-        echo "[$(date)] ✅ opkg update 成功" >> "${LOG}"
-    else
-        echo "[$(date)] ⚠️  opkg update 失败，继续本地安装..." >> "${LOG}"
-    fi
-fi
-
-# ============= 检查 ipk 文件是否存在 =============
-if [ ! -f "${IPK_PATH}" ]; then
-    echo "[$(date)] ❌ ERROR: ipk 文件不存在: ${IPK_PATH}" >> "${LOG}"
-    exit 1
-fi
-
-echo "[$(date)] 找到 ipk 文件: ${IPK_PATH}" >> "${LOG}"
-
-# ============= 卸载官方版本（如果存在）=============
-if opkg list-installed | grep -q "^luci-app-homeproxy "; then
-    echo "[$(date)] 检测到已安装官方版本，先卸载..." >> "${LOG}"
-    opkg remove luci-app-homeproxy \
-        --force-depends \
-        --force-remove \
-        >> "${LOG}" 2>&1
-fi
-
-# ============= 强制安装自定义版本 =============
-echo "[$(date)] 正在安装自定义版本..." >> "${LOG}"
-opkg install "${IPK_PATH}" \
-    --force-reinstall \
-    --force-overwrite \
-    >> "${LOG}" 2>&1
-
-if [ $? -eq 0 ]; then
-    echo "[$(date)] ✅ homeproxy 安装成功！" >> "${LOG}"
-    # 清理 ipk 释放空间
-    rm -f "${IPK_PATH}"
-    rmdir /root/preinstall 2>/dev/null || true
-    # 重启 uhttpd 使 LuCI 生效
-    /etc/init.d/uhttpd restart >> "${LOG}" 2>&1
-else
-    echo "[$(date)] ❌ homeproxy 安装失败，请查看日志: ${LOG}" >> "${LOG}"
-fi
-
-exit 0
-UCIEOF
-
-chmod +x /home/build/immortalwrt/files/etc/uci-defaults/99-install-homeproxy
-echo "✅ 首次启动安装脚本写入完成"
-
-# ============= 验证 files 目录结构 =============
-echo "========================================"
-echo "📁 验证 files 目录结构："
-echo "========================================"
-echo "--- preinstall 目录 ---"
-ls -lah /home/build/immortalwrt/files/root/preinstall/
-echo "--- uci-defaults 目录 ---"
-ls -lah /home/build/immortalwrt/files/etc/uci-defaults/
-echo "--- uci-defaults 脚本内容 ---"
-cat /home/build/immortalwrt/files/etc/uci-defaults/99-install-homeproxy
-echo "========================================"
-
 # ============= 开始编译 =============
 echo "$(date '+%Y-%m-%d %H:%M:%S') - 开始构建..."
 PACKAGES=""
@@ -276,8 +158,6 @@ PACKAGES="$PACKAGES luci-i18n-samba4-zh-cn"
 # quickstart：从本地仓库安装
 PACKAGES="$PACKAGES quickstart"
 PACKAGES="$PACKAGES luci-app-quickstart"
-# homeproxy：编译时安装官方版本（提供依赖），首次启动时被自定义版本覆盖
-PACKAGES="$PACKAGES luci-app-homeproxy"
 # 合并第三方插件
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
 
