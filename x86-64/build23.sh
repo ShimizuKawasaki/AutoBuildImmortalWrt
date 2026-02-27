@@ -179,32 +179,58 @@ LOG="/var/log/homeproxy-install.log"
 
 echo "[$(date)] ===== 开始安装 homeproxy =====" >> "${LOG}"
 
-# 检查 ipk 文件是否存在
+# ============= 等待网络就绪 =============
+echo "[$(date)] 等待网络就绪..." >> "${LOG}"
+MAX_WAIT=10
+WAITED=0
+while ! ping -c 1 -W 2 223.5.5.5 > /dev/null 2>&1; do
+    if [ "$WAITED" -ge "$MAX_WAIT" ]; then
+        echo "[$(date)] ⚠️  网络等待超时 ${MAX_WAIT}s，跳过 opkg update，继续本地安装..." >> "${LOG}"
+        break
+    fi
+    echo "[$(date)] 网络未就绪，等待中... (${WAITED}s)" >> "${LOG}"
+    sleep 5
+    WAITED=$((WAITED + 5))
+done
+
+# ============= opkg update =============
+if ping -c 1 -W 2 223.5.5.5 > /dev/null 2>&1; then
+    echo "[$(date)] 网络已就绪，执行 opkg update..." >> "${LOG}"
+    opkg update >> "${LOG}" 2>&1
+    if [ $? -eq 0 ]; then
+        echo "[$(date)] ✅ opkg update 成功" >> "${LOG}"
+    else
+        echo "[$(date)] ⚠️  opkg update 失败，继续本地安装..." >> "${LOG}"
+    fi
+fi
+
+# ============= 检查 ipk 文件是否存在 =============
 if [ ! -f "${IPK_PATH}" ]; then
-    echo "[$(date)] ERROR: ipk 文件不存在: ${IPK_PATH}" >> "${LOG}"
+    echo "[$(date)] ❌ ERROR: ipk 文件不存在: ${IPK_PATH}" >> "${LOG}"
     exit 1
 fi
 
 echo "[$(date)] 找到 ipk 文件: ${IPK_PATH}" >> "${LOG}"
 
-# 先卸载官方版本（如果存在），避免冲突
+# ============= 卸载官方版本（如果存在）=============
 if opkg list-installed | grep -q "^luci-app-homeproxy "; then
     echo "[$(date)] 检测到已安装官方版本，先卸载..." >> "${LOG}"
-    opkg remove luci-app-homeproxy --force-remove >> "${LOG}" 2>&1
+    opkg remove luci-app-homeproxy \
+        --force-depends \
+        --force-remove \
+        >> "${LOG}" 2>&1
 fi
 
-# 强制安装自定义版本
+# ============= 强制安装自定义版本 =============
 echo "[$(date)] 正在安装自定义版本..." >> "${LOG}"
-opkg update
 opkg install "${IPK_PATH}" \
     --force-reinstall \
-    --force-depends \
     --force-overwrite \
     >> "${LOG}" 2>&1
 
 if [ $? -eq 0 ]; then
     echo "[$(date)] ✅ homeproxy 安装成功！" >> "${LOG}"
-    # 安装成功后清理 ipk 释放空间
+    # 清理 ipk 释放空间
     rm -f "${IPK_PATH}"
     rmdir /root/preinstall 2>/dev/null || true
     # 重启 uhttpd 使 LuCI 生效
