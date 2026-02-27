@@ -127,7 +127,7 @@ PACKAGES="$PACKAGES luci-i18n-samba4-zh-cn"
 PACKAGES="$PACKAGES quickstart"
 PACKAGES="$PACKAGES luci-app-quickstart"
 # homeproxy：直接从本地仓库安装自定义版本
-PACKAGES="$PACKAGES luci-app-homeproxy_custom_all"
+PACKAGES="$PACKAGES luci-app-homeproxy"
 # 合并第三方插件
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
 
