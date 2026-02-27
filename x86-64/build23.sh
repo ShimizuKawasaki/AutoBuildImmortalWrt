@@ -190,11 +190,12 @@ echo "[$(date)] 找到 ipk 文件: ${IPK_PATH}" >> "${LOG}"
 # 先卸载官方版本（如果存在），避免冲突
 if opkg list-installed | grep -q "^luci-app-homeproxy "; then
     echo "[$(date)] 检测到已安装官方版本，先卸载..." >> "${LOG}"
-    opkg remove luci-app-homeproxy --force-removal-of-dependent-packages >> "${LOG}" 2>&1
+    opkg remove luci-app-homeproxy --force-remove >> "${LOG}" 2>&1
 fi
 
 # 强制安装自定义版本
 echo "[$(date)] 正在安装自定义版本..." >> "${LOG}"
+opkg update
 opkg install "${IPK_PATH}" \
     --force-reinstall \
     --force-depends \
