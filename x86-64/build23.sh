@@ -1,33 +1,4 @@
-你说得对！脚本里只有**下载** ipk 到 `extra-packages/` 目录的逻辑，但缺少**实际安装**的步骤。
 
-## 问题分析
-
-```
-现在的流程：
-下载 ipk → extra-packages/ 目录  ✅
-                ↓
-         ???  ← 缺少这一步
-                ↓
-         打包进固件              ❌ 没有触发
-```
-
-关键在于 `make image` 命令只会安装 `PACKAGES` 变量里列出的包，以及通过 `FILES` 参数指定的文件。**直接丢在 `extra-packages/` 目录的 ipk 不会自动被安装。**
-
----
-
-## 正确的做法
-
-imagebuilder 支持通过 `PACKAGES` 指定本地 ipk 路径，但更标准的方式是**把 ipk 放入本地仓库目录**，然后加入 `PACKAGES` 列表。
-
-查看你的脚本，已经有 `prepare-packages.sh` 负责处理 `extra-packages/`，我们需要搞清楚它做了什么，但从脚本逻辑推断，**最终 ipk 应该被放到 `packages/` 目录**作为本地仓库。
-
----
-
-## 修复方案
-
-### 修复 quickstart
-
-```bash
 # ============= 下载 quickstart ipk =============
 echo "========================================"
 echo "🔄 正在下载 quickstart 相关 ipk..."
