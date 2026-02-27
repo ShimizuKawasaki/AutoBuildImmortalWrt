@@ -51,6 +51,53 @@ else
   ls -lah /home/build/immortalwrt/packages/
 fi
 
+# ============= 下载 quickstart ipk =============
+echo "========================================"
+echo "🔄 正在下载 quickstart 相关 ipk..."
+echo "========================================"
+mkdir -p /home/build/immortalwrt/extra-packages
+
+QUICKSTART_BASE_URL="https://github.com/animegasan/luci-app-quickstart/releases/download/1.0.2"
+
+wget -q --show-progress \
+    "${QUICKSTART_BASE_URL}/quickstart_0.7.12-60_x86_64.ipk" \
+    -O /home/build/immortalwrt/extra-packages/quickstart_0.7.12-60_x86_64.ipk
+if [ $? -ne 0 ]; then
+    echo "❌ 下载 quickstart_0.7.12-60_x86_64.ipk 失败，退出构建"
+    exit 1
+fi
+echo "✅ quickstart_0.7.12-60_x86_64.ipk 下载成功"
+
+wget -q --show-progress \
+    "${QUICKSTART_BASE_URL}/luci-app-quickstart_1.0.2-20230817_all.ipk" \
+    -O /home/build/immortalwrt/extra-packages/luci-app-quickstart_1.0.2-20230817_all.ipk
+if [ $? -ne 0 ]; then
+    echo "❌ 下载 luci-app-quickstart_1.0.2-20230817_all.ipk 失败，退出构建"
+    exit 1
+fi
+echo "✅ luci-app-quickstart_1.0.2-20230817_all.ipk 下载成功"
+
+echo "📦 quickstart ipk 文件列表："
+ls -lh /home/build/immortalwrt/extra-packages/
+
+
+# ============= 下载 homeproxy 自定义版本 ipk =============
+echo "========================================"
+echo "🔄 正在下载 homeproxy 自定义版本 ipk..."
+echo "========================================"
+
+HOMEPROXY_CUSTOM_URL="https://github.com/bulianglin/homeproxy/releases/download/dev/luci-app-homeproxy__all.ipk"
+
+wget -q --show-progress \
+    "${HOMEPROXY_CUSTOM_URL}" \
+    -O /home/build/immortalwrt/extra-packages/luci-app-homeproxy_custom_all.ipk
+if [ $? -ne 0 ]; then
+    echo "❌ 下载 luci-app-homeproxy 自定义版本失败，退出构建"
+    exit 1
+fi
+echo "✅ luci-app-homeproxy 自定义版本下载成功"
+
+
 # 输出调试信息
 echo "$(date '+%Y-%m-%d %H:%M:%S') - 开始构建..."
 # 定义所需安装的包列表 下列插件你都可以自行删减
@@ -68,8 +115,11 @@ PACKAGES="$PACKAGES openssh-sftp-server"
 PACKAGES="$PACKAGES appfilter"
 PACKAGES="$PACKAGES luci-app-appfilter"
 PACKAGES="$PACKAGES luci-i18n-appfilter-zh-cn"
-PACKAGES="$PACKAGES luci-i18n-appfilter-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-samba4-zh-cn"
+# homeproxy: 先通过官方源安装以拉取依赖，后续会卸载并替换为自定义版本
+# 注意: 前面加 - 号表示构建完成后从镜像中卸载该包本身，但依赖会保留
+PACKAGES="$PACKAGES luci-app-homeproxy -luci-app-homeproxy"
+
 # ======== shell/custom-packages.sh =======
 # 合并imm仓库以外的第三方插件
 PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
@@ -78,21 +128,6 @@ PACKAGES="$PACKAGES $CUSTOM_PACKAGES"
 if [ "$INCLUDE_DOCKER" = "yes" ]; then
     PACKAGES="$PACKAGES luci-i18n-dockerman-zh-cn"
     echo "Adding package: luci-i18n-dockerman-zh-cn"
-fi
-
-# 若构建openclash 则添加内核
-if echo "$PACKAGES" | grep -q "luci-app-openclash"; then
-    echo "✅ 已选择 luci-app-openclash，添加 openclash core"
-    mkdir -p files/etc/openclash/core
-    # Download clash_meta
-    META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-amd64.tar.gz"
-    wget -qO- $META_URL | tar xOvz > files/etc/openclash/core/clash_meta
-    chmod +x files/etc/openclash/core/clash_meta
-    # Download GeoIP and GeoSite
-    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat -O files/etc/openclash/GeoIP.dat
-    wget -q https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat -O files/etc/openclash/GeoSite.dat
-else
-    echo "⚪️ 未选择 luci-app-openclash"
 fi
 
 # 构建镜像
