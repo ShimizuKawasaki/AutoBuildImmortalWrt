@@ -1,4 +1,4 @@
-name: build-rockchip-immortalWrt-23.05.4
+name: build-rockchip-immortalWrt-23.05.6
 
 on:
   workflow_dispatch:
@@ -40,7 +40,7 @@ on:
       custom_router_ip:
         description: "请设置软路由的管理地址(注意仅对多网口软路由有效) 格式:192.168.x.1 或 10.x.x.1"
         required: true
-        default: "192.168.100.1"
+        default: "192.168.50.21"
       enable_store:
         description: "集成 store 商店"
         required: false
@@ -131,7 +131,7 @@ jobs:
               -e ENABLE_PPPOE=${{ inputs.enable_pppoe }} \
               -e PPPOE_ACCOUNT=${{ inputs.pppoe_account }} \
               -e PPPOE_PASSWORD=${{ inputs.pppoe_password }} \
-              immortalwrt/imagebuilder:rockchip-armv8-openwrt-23.05.4 /bin/bash /home/build/immortalwrt/build.sh
+              immortalwrt/imagebuilder:rockchip-armv8-openwrt-23.05.6 /bin/bash /home/build/immortalwrt/build.sh
           done
 
       - name: Create info
@@ -155,7 +155,7 @@ jobs:
       - name: Upload ImmortWrt as release assets
         uses: softprops/action-gh-release@v2.2.1
         with:
-          tag_name: Autobuild-23.05.4
+          tag_name: Autobuild-23.05.6
           name: ImmortWrt-Rockchip
           body_path: ${{ github.workspace }}/router-info.md
           files: |
