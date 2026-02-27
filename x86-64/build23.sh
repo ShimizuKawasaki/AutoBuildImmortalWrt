@@ -1,116 +1,3 @@
-
-# ============= 下载 quickstart ipk =============
-echo "========================================"
-echo "🔄 正在下载 quickstart 相关 ipk..."
-echo "========================================"
-mkdir -p /home/build/immortalwrt/extra-packages
-
-QUICKSTART_BASE_URL="https://github.com/animegasan/luci-app-quickstart/releases/download/1.0.2"
-
-wget -q --show-progress \
-    "${QUICKSTART_BASE_URL}/quickstart_0.7.12-60_x86_64.ipk" \
-    -O /home/build/immortalwrt/extra-packages/quickstart_0.7.12-60_x86_64.ipk
-if [ $? -ne 0 ]; then
-    echo "❌ 下载 quickstart_0.7.12-60_x86_64.ipk 失败，退出构建"
-    exit 1
-fi
-
-wget -q --show-progress \
-    "${QUICKSTART_BASE_URL}/luci-app-quickstart_1.0.2-20230817_all.ipk" \
-    -O /home/build/immortalwrt/extra-packages/luci-app-quickstart_1.0.2-20230817_all.ipk
-if [ $? -ne 0 ]; then
-    echo "❌ 下载 luci-app-quickstart 失败，退出构建"
-    exit 1
-fi
-echo "✅ quickstart ipk 下载成功"
-
-# ⬇️ 新增：将 ipk 复制到 packages 本地仓库目录并刷新索引
-cp /home/build/immortalwrt/extra-packages/quickstart_0.7.12-60_x86_64.ipk \
-   /home/build/immortalwrt/packages/
-cp /home/build/immortalwrt/extra-packages/luci-app-quickstart_1.0.2-20230817_all.ipk \
-   /home/build/immortalwrt/packages/
-```
-
-然后在 `PACKAGES` 变量里加上包名：
-```bash
-# ⬇️ 新增：加入 quickstart 包名让 make image 安装
-PACKAGES="$PACKAGES quickstart"
-PACKAGES="$PACKAGES luci-app-quickstart"
-```
-
----
-
-### 修复 homeproxy
-
-homeproxy 的逻辑需要重新梳理，之前脚本里 `-luci-app-homeproxy` 的方式**并不可靠**，正确流程应该是：
-
-```
-① make image 时通过 PACKAGES 安装官方版（拉取依赖）
-          ↓
-② make image 构建完成，进入固件的 rootfs
-          ↓
-③ 通过 FILES 机制，把自定义 ipk 预置到固件里
-          ↓
-④ 写一个 uci-defaults 脚本，在路由器首次启动时执行卸载+安装
-```
-
-具体实现：
-
-```bash
-# ============= homeproxy 处理 =============
-echo "========================================"
-echo "🔄 正在下载 homeproxy 自定义版本 ipk..."
-echo "========================================"
-
-HOMEPROXY_CUSTOM_URL="https://github.com/bulianglin/homeproxy/releases/download/dev/luci-app-homeproxy__all.ipk"
-
-# ① 下载自定义 ipk 到 FILES 目录，让它随固件一起打包进去
-mkdir -p /home/build/immortalwrt/files/root
-
-wget -q --show-progress \
-    "${HOMEPROXY_CUSTOM_URL}" \
-    -O /home/build/immortalwrt/files/root/luci-app-homeproxy_custom_all.ipk
-if [ $? -ne 0 ]; then
-    echo "❌ 下载 luci-app-homeproxy 自定义版本失败，退出构建"
-    exit 1
-fi
-echo "✅ homeproxy 自定义版本下载成功"
-
-# ② 写入 uci-defaults 脚本，路由器首次启动时自动执行替换
-mkdir -p /home/build/immortalwrt/files/etc/uci-defaults
-cat << 'UCIEOF' > /home/build/immortalwrt/files/etc/uci-defaults/99-install-homeproxy
-#!/bin/sh
-echo ">>> 开始替换 luci-app-homeproxy 为自定义版本..."
-
-# 卸载官方版本（保留依赖）
-opkg remove luci-app-homeproxy --force-removal-of-dependent-packages=0
-
-# 安装自定义版本
-opkg install /root/luci-app-homeproxy_custom_all.ipk
-
-# 清理安装包
-rm -f /root/luci-app-homeproxy_custom_all.ipk
-
-echo ">>> luci-app-homeproxy 替换完成"
-# 脚本执行完后自动删除自身，避免重复执行
-rm -f /etc/uci-defaults/99-install-homeproxy
-UCIEOF
-
-chmod +x /home/build/immortalwrt/files/etc/uci-defaults/99-install-homeproxy
-echo "✅ uci-defaults 脚本已写入"
-```
-
-`PACKAGES` 里保留官方版用于拉取依赖：
-```bash
-# 官方版用于在构建时解析并安装依赖，uci-defaults 会在首次启动时替换为自定义版
-PACKAGES="$PACKAGES luci-app-homeproxy"
-```
-
----
-
-## 完整修复后的脚本
-
-```bash
 #!/bin/bash
 # Log file for debugging
 source shell/custom-packages.sh
@@ -265,9 +152,12 @@ fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Building image with the following packages:"
 echo "$PACKAGES"
+
 make image PROFILE="generic" PACKAGES="$PACKAGES" FILES="/home/build/immortalwrt/files" ROOTFS_PARTSIZE=$PROFILE
+
 if [ $? -ne 0 ]; then
     echo "$(date '+%Y-%m-%d %H:%M:%S') - Error: Build failed!"
     exit 1
 fi
+
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Build completed successfully."
