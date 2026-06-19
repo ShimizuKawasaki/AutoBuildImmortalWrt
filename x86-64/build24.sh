@@ -86,7 +86,7 @@ ISTORE_PKGS=(
     "taskd_1.0.3-2_all.ipk"
     "luci-lib-taskd_1.0.25_all.ipk"
     "luci-lib-xterm_4.18.0_all.ipk"
-    "luci-app-store_0.1.32-1_all.ipk"
+    "luci-app-store_0.2.0-r3_all.ipk"
 )
 
 for pkg in "${ISTORE_PKGS[@]}"; do
