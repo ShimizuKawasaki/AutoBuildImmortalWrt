@@ -45,6 +45,124 @@ else
   arch aarch64_cortex-a53 15' repositories.conf
 fi
 
+# ============= 下载 quickstart 相关 ipk =============
+echo "========================================"
+echo "🔄 正在下载 quickstart 相关 ipk..."
+echo "========================================"
+mkdir -p /home/build/immortalwrt/packages
+
+QUICKSTART_BASE_URL="https://github.com/animegasan/luci-app-quickstart/releases/download/1.0.2"
+
+wget -q --show-progress \
+    "${QUICKSTART_BASE_URL}/quickstart_0.7.12-60_aarch64_generic.ipk" \
+    -O /home/build/immortalwrt/packages/quickstart_0.7.12-60_aarch64_generic.ipk
+if [ $? -ne 0 ]; then
+    echo "❌ 下载 quickstart_0.7.12-60_aarch64_generic.ipk 失败，退出构建"
+    exit 1
+fi
+echo "✅ quickstart_0.7.12-60_aarch64_generic.ipk 下载成功"
+
+wget -q --show-progress \
+    "${QUICKSTART_BASE_URL}/luci-app-quickstart_1.0.2-20230817_all.ipk" \
+    -O /home/build/immortalwrt/packages/luci-app-quickstart_1.0.2-20230817_all.ipk
+if [ $? -ne 0 ]; then
+    echo "❌ 下载 luci-app-quickstart_1.0.2-20230817_all.ipk 失败，退出构建"
+    exit 1
+fi
+echo "✅ luci-app-quickstart_1.0.2-20230817_all.ipk 下载成功"
+
+# ============= 下载 iStore 相关 ipk =============
+echo "========================================"
+echo "🔄 正在下载 iStore 相关 ipk..."
+echo "========================================"
+
+ISTORE_BASE_URL="https://istore.linkease.com/repo/all/store"
+
+ISTORE_PKGS=(
+    "taskd_1.0.3-2_all.ipk"
+    "luci-lib-taskd_1.0.25_all.ipk"
+    "luci-lib-xterm_4.18.0_all.ipk"
+    "luci-app-store_0.2.0-r3_all.ipk"
+)
+
+for pkg in "${ISTORE_PKGS[@]}"; do
+    echo "📦 正在下载: $pkg"
+    wget -q --show-progress \
+        "${ISTORE_BASE_URL}/${pkg}" \
+        -O /home/build/immortalwrt/packages/${pkg}
+    if [ $? -ne 0 ]; then
+        echo "❌ 下载 ${pkg} 失败，退出构建"
+        exit 1
+    fi
+    echo "✅ ${pkg} 下载成功"
+done
+
+echo "✅ iStore 相关 ipk 全部下载成功"
+
+# ============= 手动生成本地仓库索引 =============
+echo "========================================"
+echo "🔄 正在手动生成本地仓库索引..."
+echo "========================================"
+
+LOCAL_REPO="/home/build/immortalwrt/packages"
+cd "$LOCAL_REPO"
+
+# 清空旧索引
+> Packages
+
+for ipk in *.ipk; do
+    [ -f "$ipk" ] || continue
+    echo "📦 正在处理: $ipk"
+
+    TMP_DIR=$(mktemp -d)
+    cd "$TMP_DIR"
+
+    ar x "$LOCAL_REPO/$ipk" 2>/dev/null
+    if [ -f control.tar.gz ]; then
+        tar xzf control.tar.gz ./control 2>/dev/null || tar xzf control.tar.gz 2>/dev/null
+    elif [ -f control.tar.xz ]; then
+        tar xJf control.tar.xz ./control 2>/dev/null || tar xJf control.tar.xz 2>/dev/null
+    fi
+
+    if [ ! -f control ]; then
+        echo "  ⚠️  无法解压 control 文件，跳过 $ipk"
+        cd "$LOCAL_REPO"
+        rm -rf "$TMP_DIR"
+        continue
+    fi
+
+    sed '/^$/d' control >> "$LOCAL_REPO/Packages"
+    echo "Filename: $ipk" >> "$LOCAL_REPO/Packages"
+
+    SIZE=$(stat -c%s "$LOCAL_REPO/$ipk")
+    echo "Size: $SIZE" >> "$LOCAL_REPO/Packages"
+
+    SHA256=$(sha256sum "$LOCAL_REPO/$ipk" | awk '{print $1}')
+    echo "SHA256sum: $SHA256" >> "$LOCAL_REPO/Packages"
+    echo "" >> "$LOCAL_REPO/Packages"
+
+    cd "$LOCAL_REPO"
+    rm -rf "$TMP_DIR"
+done
+
+gzip -k -f Packages
+
+echo "✅ 本地仓库索引生成完毕"
+echo "========================================"
+echo "📋 Packages 内容预览："
+cat Packages
+echo "========================================"
+ls -lah "$LOCAL_REPO"
+
+cd /home/build/immortalwrt
+
+# ============= 注册本地仓库到 repositories.conf（插入到第一行） =============
+if ! grep -q "src/gz local_extra" repositories.conf; then
+    sed -i '1s/^/src\/gz local_extra file:\/\/\/home\/build\/immortalwrt\/packages\n/' repositories.conf
+    echo "✅ 本地仓库已注册到 repositories.conf 第一行"
+else
+    echo "⚪️ 本地仓库已存在，跳过注册"
+fi
 
 # 输出调试信息
 echo "$(date '+%Y-%m-%d %H:%M:%S') - 开始构建固件..."
