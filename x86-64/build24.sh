@@ -189,10 +189,6 @@ PACKAGES="$PACKAGES luci-i18n-package-manager-zh-cn"
 PACKAGES="$PACKAGES luci-i18n-ttyd-zh-cn"
 PACKAGES="$PACKAGES openssh-sftp-server"
 PACKAGES="$PACKAGES luci-i18n-samba4-zh-cn"
-# 应用拦截
-PACKAGES="$PACKAGES appfilter"
-PACKAGES="$PACKAGES luci-app-appfilter"
-PACKAGES="$PACKAGES luci-i18n-appfilter-zh-cn"
 # 文件管理器
 PACKAGES="$PACKAGES luci-i18n-filemanager-zh-cn"
 # quickstart：从本地仓库安装
